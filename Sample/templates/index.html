@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイムチャットビューア</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+
+        #chatbox {
+            height: 400px;
+            width: 100%;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            /* paddingを含めてwidth 100%にする */
+        }
+
+        .message {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .timestamp {
+            font-size: 0.8em;
+            color: #888;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>リアルタイムチャットビューア</h1>
+    <div id="chatbox">
+        <!-- 既存のメッセージをサーバーサイドでレンダリング -->
+        {% for msg in messages %}
+        <div class="message">
+            <span>{{ msg.text }}</span>
+            <span class="timestamp">{{ msg.timestamp }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        const chatbox = document.getElementById('chatbox');
+
+        // Function to add a new message to the chatbox
+        function addMessage(messageData) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = messageData.text;
+
+            const timestampSpan = document.createElement('span');
+            timestampSpan.classList.add('timestamp');
+            timestampSpan.textContent = messageData.timestamp;
+
+            messageElement.appendChild(textSpan);
+            messageElement.appendChild(timestampSpan);
+
+            chatbox.appendChild(messageElement);
+            // Scroll to the bottom
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+
+        // Connect to the Server-Sent Events endpoint
+        const eventSource = new EventSource('/events');
+
+        eventSource.onmessage = function (event) {
+            console.log("Received SSE data:", event.data);
+            try {
+                const messageData = JSON.parse(event.data);
+                addMessage(messageData);
+            } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+            }
+        };
+
+        eventSource.onerror = function (err) {
+            console.error("EventSource failed:", err);
+            // Optionally, try to reconnect or notify the user
+            eventSource.close(); // Close the connection on error
+            // You might want to implement a reconnection strategy here
+            setTimeout(() => {
+                console.log("Attempting to reconnect SSE...");
+                // Re-initialize or handle reconnection logic
+                // For simplicity, we just log here. A robust app would re-initialize EventSource.
+            }, 5000); // Reconnect after 5 seconds
+        };
+
+        console.log("SSE connection initiated.");
+
+        // Initial scroll to bottom if there are pre-rendered messages
+        chatbox.scrollTop = chatbox.scrollHeight;
+
+    </script>
+</body>
+
+</html>
