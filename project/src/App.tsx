@@ -88,51 +88,67 @@ function App() {
       console.log('SSE connection opened');
     };
 
+    // Replace your current SSE onmessage handler with this updated version
     eventSource.onmessage = (event) => {
       try {
         console.log('[SSE] Raw data received:', event.data);
-        // Extract data from SSE event
-        const messageData = event.data.substring(event.data.indexOf("{"));
-        const newMessage: ReceivedMessage = JSON.parse(messageData);
-        console.log('[SSE] Parsed message text:', newMessage.text);
+        const messageData = JSON.parse(event.data);
+        console.log('[SSE] Parsed message text:', messageData.text);
 
         const splitter = new GraphemeSplitter();
-        const graphemes = splitter.splitGraphemes(newMessage.text);
-        const emojiCount = graphemes.length;
+        const graphemes = splitter.splitGraphemes(messageData.text);
+        console.log('[SSE] Graphemes:', graphemes);
 
-        // Check if the string contains ONLY emojis, punctuation, and whitespace
-        const isEmojiOnly = !/[^\p{Emoji}\p{Punctuation}\s]/u.test(newMessage.text);
+        // Create a function to test if a grapheme is an emoji (including variation selectors)
+        const isEmoji = (grapheme) => {
+          // Test for base emoji
+          const baseEmojiTest = /^\p{Emoji}/u.test(grapheme);
 
-        console.log(`[SSE] Is emoji only? (GraphemeSplitter):`, isEmojiOnly);
+          // Handle variation selectors specially
+          // Many emoji with presentation style (U+FE0F - variation selector-16)
+          // are being incorrectly classified
+          const hasVariationSelector = grapheme.includes('\uFE0F') || grapheme.includes('\uFE0E');
+
+          return baseEmojiTest || hasVariationSelector || /^\s+$/.test(grapheme);
+        };
+
+        // Check if ALL graphemes are emojis
+        const isEmojiOnly = graphemes.length > 0 && graphemes.every(isEmoji);
+
+        console.log(`[SSE] Is emoji only?`, isEmojiOnly, 'Grapheme tests:', graphemes.map(g => ({
+          grapheme: g,
+          isEmoji: isEmoji(g),
+          hasVariationSelector: g.includes('\uFE0F') || g.includes('\uFE0E')
+        })));
 
         if (isEmojiOnly) {
-          // NEW: Maximum allowed emoji count (5 emojis)
+          // Filter out spaces when counting emojis
+          const emojiCount = graphemes.filter(g => !/^\s+$/.test(g)).length;
           const MAX_EMOJI_COUNT = 5;
+
           if (emojiCount > MAX_EMOJI_COUNT) {
-            console.log(`[SSE] Message exceeds emoji count limit (${emojiCount} > ${MAX_EMOJI_COUNT}):`, newMessage.text);
+            console.log(`[SSE] Message exceeds emoji count limit (${emojiCount} > ${MAX_EMOJI_COUNT}):`, messageData.text);
             return;
           }
 
           // Blocklist check
-          if (BLOCKED_EMOJI_COMBINATIONS.includes(newMessage.text)) {
-            console.log('[SSE] Blocked emoji combination detected:', newMessage.text);
-            // ブロック対象の場合は何もしない (アニメーションもリスト追加もしない)
-          } else {
-            // ブロック対象でない場合、文字列全体を一つの塊としてアニメーションをトリガー
-            console.log('[SSE] Triggering animation for emoji string:', newMessage.text);
-            triggerEmojiAnimation(newMessage.text); // 文字列全体を渡す
-            // この場合、受信メッセージ欄には追加しない
+          if (BLOCKED_EMOJI_COMBINATIONS.includes(messageData.text)) {
+            console.log('[SSE] Blocked emoji combination detected:', messageData.text);
+            return;
           }
+
+          console.log('[SSE] Triggering animation for emoji string:', messageData.text);
+          triggerEmojiAnimation(messageData.text);
         } else {
-          // 通常のメッセージとして表示 (絵文字以外が含まれる場合)
-          console.log('[SSE] Adding non-emoji-only message to list:', newMessage.text);
-          setReceivedMessages((prevMessages: ReceivedMessage[]) => {
-            const updatedMessages = [newMessage, ...prevMessages];
-            return updatedMessages.slice(0, 10); // 表示件数を制限
+          // Regular message display logic
+          console.log('[SSE] Adding non-emoji-only message to list:', messageData.text);
+          setReceivedMessages((prevMessages) => {
+            const updatedMessages = [messageData, ...prevMessages];
+            return updatedMessages.slice(0, 10);
           });
         }
       } catch (error) {
-        console.error('Failed to parse SSE message data:', error);
+        console.error('Failed to parse SSE message data:', error, event.data);
       }
     };
 
