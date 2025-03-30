@@ -14,16 +14,21 @@ async def send_sse_message(text):
     # 送信するデータをJSON文字列に変換
     message_data = json.dumps({"text": text, "timestamp": datetime.now().isoformat()})
     # 接続が切れているクライアントを考慮しつつ送信
-    disconnected_clients = set()
-    for client in sse_clients:
+    # Iterate over a copy of the set to allow modification during iteration
+    clients_to_remove = set()
+    for client in list(sse_clients):
         try:
             await client.send(message_data)
         except ConnectionResetError:
-            print("Client connection reset. Removing client.")
-            disconnected_clients.add(client)
+            print(f"Client connection reset. Removing client: {client}")
+            clients_to_remove.add(client)
         except Exception as e:
-            print(f"Error sending message to SSE client: {e}")
-            disconnected_clients.add(client)
+            print(f"Error sending message to SSE client {client}: {e}")
+            clients_to_remove.add(client)
+
+    # Remove clients that caused errors
+    for client in clients_to_remove:
+        sse_clients.discard(client)
 
 async def handle_post(request):
     print("[handle_post] Received request.")
@@ -62,15 +67,11 @@ async def sse_handler(request):
             sse_clients.add(resp)
             print(f"[sse_handler] Client added. Current clients: {len(sse_clients)}")
             # クライアントが接続している間、待機
-            # asyncio.Event().wait() はここでは適切でないため、接続維持のためのループを入れる
-            # または、単に接続が開いている間は何もしない (aiohttp-sseが管理)
-            while True:
-                 # 定期的にpingを送るなどして接続を維持することも可能
-                 # await resp.ping()
-                 await asyncio.sleep(60) # 例: 60秒ごとにチェック
-                 if resp.connection is None or resp.connection.closed:
-                     print("[sse_handler] Client connection closed detected in loop.")
-                     break
+            # aiohttp-sse の sse_response が接続を管理するため、
+            # 明示的なループは不要。接続が切れるまで待機する。
+            # 必要であれば、ここで初期メッセージなどを送信できる。
+            # 例: await resp.send(json.dumps({"type": "welcome", "message": "Connected!"}))
+            await asyncio.Event().wait() # Keep the handler alive until disconnected
 
     except asyncio.CancelledError:
         print("[sse_handler] SSE handler cancelled.")

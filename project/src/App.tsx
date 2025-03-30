@@ -100,8 +100,8 @@ function App() {
         const graphemes = splitter.splitGraphemes(newMessage.text);
         const emojiCount = graphemes.length;
 
-        // Use grapheme splitter and unicode regex to test each grapheme
-        const isEmojiOnly = emojiCount > 0 && graphemes.every(g => /^\p{Emoji}$/u.test(g));
+        // Check if the string contains ONLY emojis, punctuation, and whitespace
+        const isEmojiOnly = !/[^\p{Emoji}\p{Punctuation}\s]/u.test(newMessage.text);
 
         console.log(`[SSE] Is emoji only? (GraphemeSplitter):`, isEmojiOnly);
 
