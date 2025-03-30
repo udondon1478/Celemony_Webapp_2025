@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react'; // useRef, useCallback を追加
 import { motion, AnimatePresence } from 'framer-motion';
 import { Smile, Send, MessageSquare } from 'lucide-react';
 import GraphemeSplitter from 'grapheme-splitter';
@@ -26,8 +26,9 @@ const SPECIAL_COMBINATIONS = {
 };
 const BLOCKED_EMOJI_COMBINATIONS: string[] = ["🥺👉👈"];
 
-const MAX_DISPLAYED_EMOJIS = 200; // ★ 表示する絵文字の最大数を定義
+const MAX_DISPLAYED_EMOJIS = 1000; // 表示する絵文字の最大数を定義
 const EMOJI_DISPLAY_DURATION = 5000; // 絵文字の表示時間 (ms)
+const THROTTLE_INTERVAL = 150; // ★ キュー処理の間隔 (ミリ秒) - この値を調整
 
 function App() {
   const [displayedEmojis, setDisplayedEmojis] = useState<EmojiDisplay[]>([]);
@@ -35,16 +36,18 @@ function App() {
   const [stats, setStats] = useState({ total: 0, current: 0 });
   const [receivedMessages, setReceivedMessages] = useState<ReceivedMessage[]>([]);
 
-  // ★ stats.current を displayedEmojis の長さに同期させる useEffect
-  useEffect(() => {
-    setStats(prev => ({
-      ...prev,
-      current: displayedEmojis.length
-    }));
-  }, [displayedEmojis]); // displayedEmojis が変更されるたびに実行
+  // ★ キューとスロットリングのための Ref を追加
+  const emojiQueueRef = useRef<string[]>([]); // 絵文字文字列を溜めるキュー
+  const isProcessingQueueRef = useRef<boolean>(false); // 現在キューを処理中かどうかのフラグ
+  const throttleTimerRef = useRef<NodeJS.Timeout | null>(null); // スロットリング用タイマー
 
-  // 絵文字アニメーションをトリガーする関数
-  const triggerEmojiAnimation = (emojiToDisplay: string) => {
+  // stats.current の更新 (変更なし)
+  useEffect(() => {
+    setStats(prev => ({ ...prev, current: displayedEmojis.length }));
+  }, [displayedEmojis]);
+
+  // ★ 絵文字を実際に表示する内部関数 (元の triggerEmojiAnimation のコアロジック)
+  const displaySingleEmoji = useCallback((emojiToDisplay: string) => {
     const minHeight = window.innerHeight * 0.2;
     const maxHeight = window.innerHeight * 0.7;
     const randomY = minHeight + Math.random() * (maxHeight - minHeight);
@@ -53,41 +56,93 @@ function App() {
     const newEmoji: EmojiDisplay = {
       id: Date.now().toString() + Math.random(),
       emoji: emojiToDisplay,
-      x: Math.random() * (window.innerWidth - 100), // 画面幅に応じて調整
+      x: Math.random() * (window.innerWidth - 100),
       y: randomY,
       rotation: randomRotation
     };
 
-    // ★ Stateを更新し、上限を超えたら古いものを削除
+    // State更新 (上限チェック含む)
     setDisplayedEmojis(prevEmojis => {
-      const updatedEmojis = [...prevEmojis, newEmoji]; // 新しい絵文字を追加
-      // 上限を超えているかチェック
-      if (updatedEmojis.length > MAX_DISPLAYED_EMOJIS) {
-        // 上限を超えていたら、一番古いもの（配列の先頭）を削除
-        return updatedEmojis.slice(1);
-      }
-      // 上限に達していなければ、そのまま返す
-      return updatedEmojis;
+      const updatedEmojis = [...prevEmojis, newEmoji];
+      return updatedEmojis.length > MAX_DISPLAYED_EMOJIS
+        ? updatedEmojis.slice(updatedEmojis.length - MAX_DISPLAYED_EMOJIS) // ★ 常に末尾MAX個を保持するように変更 (slice(1)だと古いものが残る可能性)
+        : updatedEmojis;
     });
 
-    // ★ 総送信数のみここでインクリメント (current は useEffect で管理)
-    setStats(prev => ({ ...prev, total: prev.total + 1 }));
+    // 総送信数インクリメント
+    setStats(prev => ({ ...prev, total: prev.total + 1 })); // 総送信数はキューに入った時点 or 表示された時点、どちらが良いか要件次第。ここでは表示時点。
 
-    // ★ 一定時間後に絵文字を削除 (削除時の current カウントは useEffect が処理)
+    // 一定時間後に削除
     setTimeout(() => {
-      // ID に基づいて削除する (上限削除で既に消えている可能性もあるが問題ない)
       setDisplayedEmojis(prev => prev.filter(e => e.id !== newEmoji.id));
     }, EMOJI_DISPLAY_DURATION);
-  };
+  }, []); // 依存配列を空に (内部で使う State や Props がないため)
 
-  // ボタンクリック時の処理
+  // ★ キューを処理する関数 (スロットリングされる)
+  const processEmojiQueue = useCallback(() => {
+    if (isProcessingQueueRef.current || emojiQueueRef.current.length === 0) {
+      // 既に処理中か、キューが空なら何もしない
+      throttleTimerRef.current = null; // タイマーをリセット
+      return;
+    }
+
+    isProcessingQueueRef.current = true; // 処理開始フラグ
+
+    // requestAnimationFrame を使って、ブラウザの描画タイミングに合わせて処理
+    // これにより、一度に大量処理するのではなく、少しずつ処理を分散できる
+    requestAnimationFrame(() => {
+      const emojisToProcess = [...emojiQueueRef.current]; // 現在のキューをコピー
+      emojiQueueRef.current = []; // 元のキューを空にする
+
+      // console.log(`[Queue] Processing ${emojisToProcess.length} emojis.`); // デバッグ用
+
+      // キュー内の絵文字を順番に表示
+      // 注意: 一度の処理で大量の絵文字を displaySingleEmoji に渡すと
+      // 結局 setDisplayedEmojis が連続で呼ばれる可能性がある。
+      // さらに負荷を下げるなら、一度の processEmojiQueue で処理する数を制限するなどの工夫も可能。
+      emojisToProcess.forEach(emoji => {
+        displaySingleEmoji(emoji);
+      });
+
+      isProcessingQueueRef.current = false; // 処理完了フラグ
+
+      // キューがまだ残っていれば、次のインターバルで再度処理を試みる
+      if (emojiQueueRef.current.length > 0) {
+        if (!throttleTimerRef.current) { // タイマーがなければ再セット
+          throttleTimerRef.current = setTimeout(processEmojiQueue, THROTTLE_INTERVAL);
+        }
+      } else {
+        throttleTimerRef.current = null; // キューが空ならタイマー不要
+      }
+    });
+
+  }, [displaySingleEmoji]); // displaySingleEmoji が変わらない限り再生成されない
+
+
+  // ★ SSEメッセージをキューに追加し、処理をトリガーする関数
+  const enqueueEmoji = useCallback((emoji: string) => {
+    emojiQueueRef.current.push(emoji);
+    // console.log(`[Queue] Added: ${emoji}. Queue size: ${emojiQueueRef.current.length}`); // デバッグ用
+
+    // スロットリングタイマーがセットされていなければ、処理を開始するタイマーをセット
+    if (!throttleTimerRef.current && !isProcessingQueueRef.current) {
+      throttleTimerRef.current = setTimeout(processEmojiQueue, THROTTLE_INTERVAL);
+    }
+  }, [processEmojiQueue]); // processEmojiQueue が変わらない限り再生成されない
+
+  // ボタンクリック時の処理 (直接表示)
   const handleEmojiButtonClick = () => {
-    triggerEmojiAnimation(selectedEmoji);
+    // ボタンからの送信は即時反映させるため、直接 displaySingleEmoji を呼ぶ
+    displaySingleEmoji(selectedEmoji);
   };
 
-  // 特殊エフェクトの確認 (変更なし)
+  // 特殊エフェクトの確認
   useEffect(() => {
-    // ... (省略) ...
+    const lastTwo = displayedEmojis.slice(-2).map((e: EmojiDisplay) => e.emoji).join('');
+    if (SPECIAL_COMBINATIONS[lastTwo as keyof typeof SPECIAL_COMBINATIONS]) {
+      console.log(SPECIAL_COMBINATIONS[lastTwo as keyof typeof SPECIAL_COMBINATIONS]);
+      // ここで特殊エフェクトのアニメーションを追加できます
+    }
   }, [displayedEmojis]);
 
   // SSE接続とメッセージ受信 (isEmoji関数の修正を含む)
@@ -147,7 +202,9 @@ function App() {
           }
 
           // console.log('[SSE] Triggering animation for emoji string:', messageData.text); // デバッグ用
-          triggerEmojiAnimation(messageData.text); // 絵文字アニメーション実行
+          // ★ triggerEmojiAnimation の代わりに enqueueEmoji を呼び出す
+          enqueueEmoji(messageData.text);
+
         } else {
           // 通常メッセージ処理
           // console.log('[SSE] Adding non-emoji-only message to list:', messageData.text); // デバッグ用
@@ -176,8 +233,13 @@ function App() {
     return () => {
       console.log('Closing EventSource connection');
       eventSource.close();
+      // ★ コンポーネントアンマウント時にタイマーをクリア
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+      }
     };
-  }, []); // マウント時にのみ実行
+    // ★ enqueueEmoji を依存配列に追加 (useCallback でラップしたので通常は再生成されない)
+  }, [enqueueEmoji]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative overflow-hidden flex flex-col">
@@ -215,15 +277,61 @@ function App() {
         </AnimatePresence>
       </div>
 
-      {/* 受信メッセージ表示エリア (変更なし) */}
+      {/* 受信メッセージ表示エリア (画面下部、コントロールパネルの上) */}
       <div className="absolute bottom-32 left-4 right-4 md:left-auto md:right-4 md:w-96 h-48 bg-black bg-opacity-50 backdrop-blur-sm rounded-lg p-3 overflow-y-auto text-white shadow-xl z-10">
-        {/* ... (省略) ... */}
+        <h2 className="text-sm font-semibold mb-2 border-b border-gray-400 pb-1 flex items-center gap-1">
+          <MessageSquare size={14} />
+          受信メッセージ
+        </h2>
+        {receivedMessages.length === 0 ? (
+          <p className="text-xs text-gray-300 italic">メッセージ待機中...</p>
+        ) : (
+          <AnimatePresence initial={false}>
+            {receivedMessages.map((msg: ReceivedMessage, index: number) => (
+              <motion.div
+                key={msg.timestamp + index} // よりユニークなキー
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="text-xs mb-1 border-b border-gray-600 pb-1 last:border-b-0"
+              >
+                <span className="text-gray-400 mr-1">[{new Date(msg.timestamp).toLocaleTimeString()}]</span>
+                <span>{msg.text}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
       </div>
 
-      {/* コントロールパネル (変更なし) */}
+      {/* コントロールパネル (z-indexでメッセージエリアより手前に) */}
       <div className="absolute bottom-0 left-0 right-0 bg-white bg-opacity-90 p-6 shadow-lg z-20">
         <div className="max-w-4xl mx-auto">
-          {/* ... (ボタンなど) ... */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex-grow grid grid-cols-5 sm:grid-cols-10 gap-2"> {/* flex-1 を flex-grow に変更 */}
+              {EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => setSelectedEmoji(emoji)}
+                  className={`text-2xl p-2 rounded-lg transition-all ${selectedEmoji === emoji
+                    ? 'bg-purple-500 scale-110'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleEmojiButtonClick} // addEmoji を handleEmojiButtonClick に変更
+              className="bg-purple-500 text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-purple-600 transition-colors"
+            >
+              <Send size={20} />
+              <span>送信</span>
+            </button>
+          </div>
+
+          {/* 統計情報 */}
           <div className="flex items-center justify-between text-sm text-gray-600 mt-4"> {/* mt-4 を追加 */}
             <div className="flex items-center gap-2">
               <Smile size={16} />
@@ -234,8 +342,8 @@ function App() {
             <div>総送信数: {stats.total}</div>
           </div>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
 
