@@ -242,7 +242,8 @@ function App() {
   }, [enqueueEmoji]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative overflow-hidden flex flex-col">
+    <div className="min-h-screen  relative overflow-hidden flex flex-col">
+      {/* この後ろのクラスは初期に実装されていたグラデーション、もし有効化するなら上のクラスを消して後ろを有効化 */}{/* <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative overflow-hidden flex flex-col"> */}
       {/* 絵文字表示エリア */}
       <div className="absolute inset-0 flex-grow">
         <AnimatePresence> {/* exit アニメーションのために必要 */}
@@ -277,7 +278,8 @@ function App() {
         </AnimatePresence>
       </div>
 
-      {/* 受信メッセージ表示エリア (画面下部、コントロールパネルの上) */}
+      {/* 
+      // 受信メッセージ表示エリア (画面下部、コントロールパネルの上)
       <div className="absolute bottom-32 left-4 right-4 md:left-auto md:right-4 md:w-96 h-48 bg-black bg-opacity-50 backdrop-blur-sm rounded-lg p-3 overflow-y-auto text-white shadow-xl z-10">
         <h2 className="text-sm font-semibold mb-2 border-b border-gray-400 pb-1 flex items-center gap-1">
           <MessageSquare size={14} />
@@ -287,62 +289,61 @@ function App() {
           <p className="text-xs text-gray-300 italic">メッセージ待機中...</p>
         ) : (
           <AnimatePresence initial={false}>
-            {receivedMessages.map((msg: ReceivedMessage, index: number) => (
-              <motion.div
-                key={msg.timestamp + index} // よりユニークなキー
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="text-xs mb-1 border-b border-gray-600 pb-1 last:border-b-0"
-              >
-                <span className="text-gray-400 mr-1">[{new Date(msg.timestamp).toLocaleTimeString()}]</span>
-                <span>{msg.text}</span>
-              </motion.div>
-            ))}
+        {receivedMessages.map((msg: ReceivedMessage, index: number) => (
+          <motion.div
+            key={msg.timestamp + index} // よりユニークなキー
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="text-xs mb-1 border-b border-gray-600 pb-1 last:border-b-0"
+          >
+            <span className="text-gray-400 mr-1">[{new Date(msg.timestamp).toLocaleTimeString()}]</span>
+            <span>{msg.text}</span>
+          </motion.div>
+        ))}
           </AnimatePresence>
         )}
       </div>
 
-      {/* コントロールパネル (z-indexでメッセージエリアより手前に) */}
+      // コントロールパネル (z-indexでメッセージエリアより手前に)
       <div className="absolute bottom-0 left-0 right-0 bg-white bg-opacity-90 p-6 shadow-lg z-20">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4 mb-4">
-            <div className="flex-grow grid grid-cols-5 sm:grid-cols-10 gap-2"> {/* flex-1 を flex-grow に変更 */}
-              {EMOJIS.map(emoji => (
-                <button
-                  key={emoji}
-                  onClick={() => setSelectedEmoji(emoji)}
-                  className={`text-2xl p-2 rounded-lg transition-all ${selectedEmoji === emoji
-                    ? 'bg-purple-500 scale-110'
-                    : 'bg-gray-100 hover:bg-gray-200'
-                    }`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+        <div className="flex-grow grid grid-cols-5 sm:grid-cols-10 gap-2"> 
+          {EMOJIS.map(emoji => (
             <button
-              onClick={handleEmojiButtonClick} // addEmoji を handleEmojiButtonClick に変更
-              className="bg-purple-500 text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-purple-600 transition-colors"
+          key={emoji}
+          onClick={() => setSelectedEmoji(emoji)}
+          className={`text-2xl p-2 rounded-lg transition-all ${selectedEmoji === emoji
+            ? 'bg-purple-500 scale-110'
+            : 'bg-gray-100 hover:bg-gray-200'
+            }`}
             >
-              <Send size={20} />
-              <span>送信</span>
+          {emoji}
             </button>
+          ))}
+        </div>
+        <button
+          onClick={handleEmojiButtonClick}
+          className="bg-purple-500 text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-purple-600 transition-colors"
+        >
+          <Send size={20} />
+          <span>送信</span>
+        </button>
           </div>
 
-          {/* 統計情報 */}
-          <div className="flex items-center justify-between text-sm text-gray-600 mt-4"> {/* mt-4 を追加 */}
-            <div className="flex items-center gap-2">
-              <Smile size={16} />
-              {/* ★ stats.current を表示 */}
-              <span>現在の表示数: {stats.current} / {MAX_DISPLAYED_EMOJIS}</span>
-            </div>
-            {/* ★ stats.total を表示 */}
-            <div>総送信数: {stats.total}</div>
+          // 統計情報
+          <div className="flex items-center justify-between text-sm text-gray-600 mt-4">
+        <div className="flex items-center gap-2">
+          <Smile size={16} />
+          <span>現在の表示数: {stats.current} / {MAX_DISPLAYED_EMOJIS}</span>
+        </div>
+        <div>総送信数: {stats.total}</div>
           </div>
         </div>
       </div >
+      */}
     </div >
   );
 }
