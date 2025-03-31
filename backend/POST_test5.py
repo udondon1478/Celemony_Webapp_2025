@@ -72,7 +72,7 @@ class AsyncUDPSender:
                 counts_array = await self.aggregator.get_aggregated_data()
                 
                 # カウントが0でない場合に送信（全て0の場合も送信する場合はこの条件を削除）
-                if any(counts_array) or False:  # 常に送信する場合
+                if any(counts_array) or True:  # 常に送信する場合
                     try:
                         # 配列をJSON文字列に変換して送信
                         message = json.dumps(counts_array).encode('utf-8')
