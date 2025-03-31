@@ -44,7 +44,7 @@ class DataAggregator:
             self.reset_alphabet_counts()
 
 class AsyncUDPSender:
-    def __init__(self, aggregator, host='222.9.129.241', port=9999):
+    def __init__(self, aggregator, host='222.9.129.241', port=9998):
         self.aggregator = aggregator
         self.host = host
         self.port = port
