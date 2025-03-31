@@ -26,9 +26,9 @@ const SPECIAL_COMBINATIONS = {
 };
 const BLOCKED_EMOJI_COMBINATIONS: string[] = ["🥺👉👈"];
 
-const MAX_DISPLAYED_EMOJIS = 100; // 表示する絵文字の最大数を定義
+const MAX_DISPLAYED_EMOJIS = 200; // 表示する絵文字の最大数を定義
 const EMOJI_DISPLAY_DURATION = 5000; // 絵文字の表示時間 (ms)
-const THROTTLE_INTERVAL = 150; // ★ キュー処理の間隔 (ミリ秒) - この値を調整
+const THROTTLE_INTERVAL = 500; // ★ キュー処理の間隔 (ミリ秒) - この値を調整
 
 function App() {
   const [displayedEmojis, setDisplayedEmojis] = useState<EmojiDisplay[]>([]);
@@ -48,8 +48,8 @@ function App() {
 
   // ★ 絵文字を実際に表示する内部関数 (元の triggerEmojiAnimation のコアロジック)
   const displaySingleEmoji = useCallback((emojiToDisplay: string) => {
-    const minHeight = window.innerHeight * 0.2;
-    const maxHeight = window.innerHeight * 0.7;
+    const minHeight = window.innerHeight * 0.05; // 5% から
+    const maxHeight = window.innerHeight * 0.95; // 95% まで
     const randomY = minHeight + Math.random() * (maxHeight - minHeight);
     const randomRotation = Math.random() * 30 - 15;
 
