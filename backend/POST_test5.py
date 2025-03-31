@@ -9,32 +9,39 @@ from collections import defaultdict
 # 接続中のSSEクライアントを保持するセット (weakrefを使用してメモリリークを防ぐ)
 sse_clients = weakref.WeakSet()
 
+# 計測対象のアルファベットとその順序を定義
+TARGET_ALPHABETS = ['x', 'k', 'h', 't', 'l', 'a', 's', 'd', 'p', 'm', 'b', 'c', 'v', 'e']
+
 class DataAggregator:
     def __init__(self):
-        # テキストごとの受信回数を集計
-        self.text_counts = defaultdict(int)
-        # テキストごとの最新タイムスタンプを保持
-        self.text_timestamps = {}
+        # アルファベットごとの受信回数を集計
+        self.reset_alphabet_counts()
         # asyncio用のロック
         self.lock = asyncio.Lock()
 
+    def reset_alphabet_counts(self):
+        # 各アルファベットのカウントを0に初期化
+        self.alphabet_counts = {letter: 0 for letter in TARGET_ALPHABETS}
+
     async def add_data(self, text, timestamp):
+        """受信テキストを処理して、対象のアルファベットの出現回数をカウント"""
         async with self.lock:
-            self.text_counts[text] += 1
-            self.text_timestamps[text] = timestamp
+            # テキストが単一文字で、かつ対象のアルファベットの場合のみカウント
+            if len(text) == 1 and text.lower() in TARGET_ALPHABETS:
+                self.alphabet_counts[text.lower()] += 1
+                print(f"Counted alphabet: {text.lower()}, current counts: {self.alphabet_counts}")
 
     async def get_aggregated_data(self):
+        """アルファベット出現回数を配列形式で取得"""
         async with self.lock:
-            # 現在の集計データのコピーを返却
-            return {
-                'counts': dict(self.text_counts),
-                'timestamps': dict(self.text_timestamps)
-            }
+            # 指定された順序でアルファベットカウントを取得（配列形式）
+            counts_array = [self.alphabet_counts[letter] for letter in TARGET_ALPHABETS]
+            return counts_array
 
     async def reset(self):
+        """カウントデータをリセット"""
         async with self.lock:
-            self.text_counts.clear()
-            self.text_timestamps.clear()
+            self.reset_alphabet_counts()
 
 class AsyncUDPSender:
     def __init__(self, aggregator, host='222.9.129.241', port=9999):
@@ -47,10 +54,10 @@ class AsyncUDPSender:
     async def start_sending(self):
         loop = asyncio.get_running_loop()
         
-        # データグラムエンドポイントを作成します。可能であれば再利用します。
+# データグラムエンドポイントを作成します。可能であれば再利用します。
         try:
-            self.transport, self.protocol = await loop.create_datagram_endpoint(
-                lambda: asyncio.DatagramProtocol(), # 基本的なプロトコル
+            self.transport, self.protocol = await loop.create_datagram_endpoint(# データグラムエンドポイントを作成。可能であれば再利用。
+                lambda: asyncio.DatagramProtocol(), # UDPプロトコルを使用
                 remote_addr=(self.host, self.port)
             )
             print(f"UDP Sender connected to {self.host}:{self.port}")
@@ -59,18 +66,18 @@ class AsyncUDPSender:
             return # 接続に失敗した場合は停止
 
         while True:
-            print("[UDP Loop] Starting iteration.") # ログ追加
+            print("[UDP Loop] Starting iteration.")
             try:
                 # 1秒ごとに集計データを送信
-                aggregated_data = await self.aggregator.get_aggregated_data()
-                print(f"[UDP Loop] Aggregated data check: counts={len(aggregated_data.get('counts', {}))}") # ログ追加
-
-                if aggregated_data['counts']: # データがある場合のみ送信
+                counts_array = await self.aggregator.get_aggregated_data()
+                
+                # カウントが0でない場合に送信（全て0の場合も送信する場合はこの条件を削除）
+                if any(counts_array) or True:  # 常に送信する場合
                     try:
-                        # JSON形式でデータをUDP送信
-                        message = json.dumps(aggregated_data).encode('utf-8')
+                        # 配列をJSON文字列に変換して送信
+                        message = json.dumps(counts_array).encode('utf-8')
                         self.transport.sendto(message)
-                        print(f"Sent UDP data: {message.decode('utf-8')}") # 可読性のためにデコードされたメッセージをログに記録
+                        print(f"Sent UDP data: {message.decode('utf-8')}")
                     except Exception as e:
                         print(f"UDP送信エラー: {e}")
                         # 送信に失敗した場合（例：ネットワークの問題）に再接続を試みる
@@ -85,8 +92,8 @@ class AsyncUDPSender:
                             print(f"Failed to re-establish UDP connection: {recon_e}")
                             await asyncio.sleep(5) # 接続を再試行する前に待機
 
-                    # 送信試行後にアグリゲーターをリセット
-                    await self.aggregator.reset()
+                # 送信後にアグリゲーターをリセット
+                await self.aggregator.reset()
 
                 # 1秒待機
                 await asyncio.sleep(1)
@@ -102,10 +109,7 @@ class AsyncUDPSender:
 
 async def send_sse_message(text):
     """接続中の全てのSSEクライアントにメッセージを送信する"""
-    # 送信するデータをJSON文字列に変換
     message_data = json.dumps({"text": text, "timestamp": datetime.now().isoformat()})
-    # 接続が切れているクライアントを考慮しつつ送信
-    # Iterate over a copy of the set to allow modification during iteration
     clients_to_remove = set()
     for client in list(sse_clients):
         try:
@@ -117,7 +121,6 @@ async def send_sse_message(text):
             print(f"Error sending message to SSE client {client}: {e}")
             clients_to_remove.add(client)
 
-    # Remove clients that caused errors
     for client in clients_to_remove:
         sse_clients.discard(client)
 
@@ -129,7 +132,7 @@ async def handle_post(request):
         payload = json.loads(post_data.decode('utf-8'))
         print("[handle_post] Parsed JSON payload.")
 
-        # イベントから必要な情報を抽出してSSEクライアントに送信
+        # イベントから必要な情報を抽出
         for event in payload.get('events', []):
             print(f"[handle_post] Processing event: type={event.get('type')}")
             if event.get('type') == 'message' and event['message'].get('type') == 'text':
@@ -137,10 +140,10 @@ async def handle_post(request):
                 # LINE Platformからのタイムスタンプを使用、なければ現在時刻
                 timestamp = event.get('timestamp', int(datetime.now().timestamp() * 1000))
                 
-                # データ集計 (非同期呼び出し)
+                # データ集計 (単一のアルファベットの場合のみカウント)
                 await request.app['aggregator'].add_data(text, timestamp)
                 
-                # 接続中のSSEクライアントにメッセージを送信
+                # SSEクライアントにメッセージを送信（全てのメッセージを送信）
                 await send_sse_message(text)
                 print(f"Processed text: {text}")
 
@@ -186,10 +189,10 @@ async def sse_handler(request):
 async def main(host='0.0.0.0', port=8081):
     # 共有アグリゲーターインスタンスを作成
     aggregator = DataAggregator()
-    
+
     # UDP送信インスタンスを作成
     udp_sender = AsyncUDPSender(aggregator)
-    
+
     # aiohttpアプリケーションを作成
     app = web.Application()
     app['aggregator'] = aggregator # アプリケーションの状態にアグリゲーターを保存
@@ -221,7 +224,6 @@ async def main(host='0.0.0.0', port=8081):
         await udp_task # UDPタスクのキャンセル完了を待つ
         await runner.cleanup()
         print("Server stopped.")
-
 
 if __name__ == '__main__':
     try:
