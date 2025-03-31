@@ -10,10 +10,6 @@ interface ReceivedMessage {
   timestamp: string;
 }
 
-interface AppProps {
-  side: 'left' | 'right';
-}
-
 interface EmojiDisplay {
   id: string;
   emoji: string;
@@ -34,26 +30,11 @@ const MAX_DISPLAYED_EMOJIS = 100; // 表示する絵文字の最大数を定義
 const EMOJI_DISPLAY_DURATION = 5000; // 絵文字の表示時間 (ms)
 const THROTTLE_INTERVAL = 150; // ★ キュー処理の間隔 (ミリ秒) - この値を調整
 
-function App({ side }: AppProps) {
+function App() {
   const [displayedEmojis, setDisplayedEmojis] = useState<EmojiDisplay[]>([]);
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]);
   const [stats, setStats] = useState({ total: 0, current: 0 });
   const [receivedMessages, setReceivedMessages] = useState<ReceivedMessage[]>([]);
-
-  const containerStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-    position: 'relative' as React.CSSProperties['position'],
-  };
-
-  const emojiAreaStyle: React.CSSProperties = {
-    position: 'absolute' as React.CSSProperties['position'],
-    top: 0,
-    left: side === 'right' ? '-100%' : '0', // 右側なら左に100%ずらす
-    width: '200%', // 幅を2倍に
-    height: '100%',
-  };
 
   // ★ キューとスロットリングのための Ref を追加
   const emojiQueueRef = useRef<string[]>([]); // 絵文字文字列を溜めるキュー
@@ -167,7 +148,7 @@ function App({ side }: AppProps) {
   // SSE接続とメッセージ受信 (isEmoji関数の修正を含む)
   useEffect(() => {
     console.log('Setting up EventSource...');
-    let eventSource = new EventSource(`/sse?side=${side}`);
+    let eventSource = new EventSource('/sse');
 
     eventSource.onopen = () => console.log('SSE connection opened');
 
@@ -261,9 +242,9 @@ function App({ side }: AppProps) {
   }, [enqueueEmoji]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative overflow-hidden flex flex-col" style={containerStyle}>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative overflow-hidden flex flex-col">
       {/* 絵文字表示エリア */}
-      <div className="absolute inset-0 flex-grow" style={emojiAreaStyle}>
+      <div className="absolute inset-0 flex-grow">
         <AnimatePresence> {/* exit アニメーションのために必要 */}
           {displayedEmojis.map(({ id, emoji, x, y, rotation }) => (
             <motion.div
