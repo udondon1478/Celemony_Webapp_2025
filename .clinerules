@@ -1,0 +1,10 @@
+# When asked to research:
+Always first search for URLs with Serper MCP
+
+If a URL is provided by the user, then give priority to that URL; if not, then use the query to find the URL
+
+Then, go ahead and scrape those URLs
+
+You can then follow the instructions accordingly.
+
+DOn't over do the reserch!

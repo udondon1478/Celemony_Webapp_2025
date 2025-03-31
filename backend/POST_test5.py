@@ -21,7 +21,7 @@ from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 # 環境変数からチャンネルアクセストークンを取得 (必須)
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 if not LINE_CHANNEL_ACCESS_TOKEN:
-    print("エラー: 環境変数 'LINE_CHANNEL_ACCESS_TOKEN' が設定されていません。")
+    print("エラー: 環境変数 'LINE_CHANNEL_ACCESS_TOKEN' が .env ファイル内またはシステム環境変数に設定されていません。")
     # ここで処理を停止するか、デフォルト値を設定するかを選択
     # exit(1) # 例: 停止する場合
 
@@ -48,8 +48,11 @@ async_api_client = AsyncApiClient(configuration) # 正しくインポートさ�
 async_line_bot_api = AsyncMessagingApi(async_api_client) # 正しくインポートされていればOK
 
 # --- ヘルパー関数: Push Message 送信 (非同期) ---
-async def send_push_message(user_id, message_text):
+# ★引数に app を追加
+async def send_push_message(app, user_id, message_text):
     """指定されたユーザーIDにテキストメッセージを非同期で送信する"""
+    # ★★★ app コンテキストから API クライアントを取得 ★★★
+    async_line_bot_api = app['line_api']
     if not LINE_CHANNEL_ACCESS_TOKEN: # トークンがない場合は送信しない
         print("Push message skipped: LINE_CHANNEL_ACCESS_TOKEN is not set.")
         return
@@ -104,6 +107,9 @@ async def send_sse_message(text):
 
 # --- Webhook ハンドラ (/test) 修正 ---
 async def handle_post(request):
+    # ★★★ request.app からアプリケーションインスタンスを取得 ★★★
+    app = request.app
+    # line_api = app['line_api'] # 必要ならここで取得
     print("[handle_post] Received request.")
     try:
         post_data = await request.read()
@@ -152,9 +158,9 @@ async def handle_post(request):
                         # インターバル内 (連投)
                         should_send_to_sse = False
                         print(f"User {user_id}: Interval ({time_diff:.2f}s) < {RATE_LIMIT_SECONDS}s. Rate limiting.")
-                        # 連投制限メッセージをユーザーに送信 (バックグラウンドタスクとして実行)
-                        task = asyncio.create_task(send_push_message(user_id, RATE_LIMIT_MESSAGE))
-                        tasks.append(task) # タスクをリストに追加 (エラー監視などに利用可能)
+                        # ★★★ send_push_message に app を渡す ★★★
+                        task = asyncio.create_task(send_push_message(app, user_id, RATE_LIMIT_MESSAGE))
+                        tasks.append(task)
 
             # --- SSE送信処理 ---
             if should_send_to_sse:
@@ -211,6 +217,29 @@ async def sse_handler(request):
 async def main(host='0.0.0.0', port=8081):
     # aiohttpアプリケーションを作成
     app = web.Application()
+
+    # --- ★★★ LINE API クライアントの初期化と設定 (main 関数内) ★★★ ---
+    configuration = linebot.v3.messaging.Configuration(
+        access_token=LINE_CHANNEL_ACCESS_TOKEN
+    )
+    # AsyncApiClient は内部でセッションを持つため、アプリ全体で共有するのが効率的
+    async_api_client = AsyncApiClient(configuration)
+    async_line_bot_api = AsyncMessagingApi(async_api_client)
+
+    # アプリケーションコンテキストに格納してハンドラからアクセスできるようにする
+    app['line_api'] = async_line_bot_api
+    app['line_config'] = configuration # 設定も格納しておくと便利
+
+    # --- ★★★ クライアントのクリーンアップ設定 ★★★ ---
+    # アプリケーション終了時に API クライアント (が持つコネクション) を閉じる
+    async def close_line_client(app_instance):
+        print("Closing LINE API client connections...")
+        # AsyncMessagingApi インスタンスから AsyncApiClient を取得し、その close メソッドを呼ぶ
+        await app_instance['line_api'].api_client.close()
+        print("LINE API client connections closed.")
+
+    # アプリケーションのクリーンアップ処理リストに追加
+    app.cleanup_ctx.append(close_line_client)
 
     # ルートを追加
     app.router.add_post('/test', handle_post) # POSTリクエスト用 (Webhook受け取り)
