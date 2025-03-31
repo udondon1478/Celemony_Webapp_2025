@@ -262,7 +262,7 @@ function App() {
                 opacity: [1, 0.8, 0],
                 transition: { duration: 0.4, ease: "easeOut" }
               }}
-              className="absolute text-6xl cursor-pointer" // サイズやスタイル調整
+              className="absolute text-3xl cursor-pointer" // サイズやスタイル調整
               style={{ x, y }} // style プロパティで直接指定
               whileHover={{ scale: 1.1 }} // ホバーエフェクト
             >
