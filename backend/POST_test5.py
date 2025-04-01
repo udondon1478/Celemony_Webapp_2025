@@ -74,10 +74,11 @@ class AsyncUDPSender:
                 # カウントが0でない場合に送信（全て0の場合も送信する場合はこの条件を削除）
                 if any(counts_array) or False:  # 常に送信する場合
                     try:
-                        # 配列をJSON文字列に変換して送信
-                        message = json.dumps(counts_array).encode('utf-8')
+                        import struct
+                        # 配列をバイナリデータに変換して送信
+                        message = struct.pack('>' + 'i' * len(counts_array), *counts_array)
                         self.transport.sendto(message)
-                        print(f"Sent UDP data: {message.decode('utf-8')}")
+                        print(f"Sent UDP data: {len(message)} bytes")
                     except Exception as e:
                         print(f"UDP送信エラー: {e}")
                         # 送信に失敗した場合（例：ネットワークの問題）に再接続を試みる
