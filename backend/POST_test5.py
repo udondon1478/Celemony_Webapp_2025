@@ -27,13 +27,8 @@ class DataAggregator:
         """受信テキストを処理して、対象のアルファベットの出現回数をカウント"""
         async with self.lock:
             # テキストが単一文字で、かつ対象のアルファベットの場合のみカウント
-            emoji_mapping = {'😄': 'e', '🥰': 'v', '🤩': 'c', '🥳': 'b', '👍': 'm', '❤️': 'p'}
-            heart_emoji = "\xe2\x9d\xa4\xef\xb8\x8f"
-            if text == heart_emoji:
-                letter = emoji_mapping['❤️']
-                self.alphabet_counts[letter] += 1
-                print(f"Counted emoji: ❤️ as alphabet: {letter}, current counts: {self.alphabet_counts}")
-            elif len(text) == 1:
+            emoji_mapping = {'😄': 'e', '🥰': 'v', '🤩': 'c', '🥳': 'b', '👍': 'm', '❤️': 'p', '❤️‍️': 'p'}
+            if len(text) == 1:
                 text_lower = text.lower()
                 if text_lower in TARGET_ALPHABETS:
                     self.alphabet_counts[text_lower] += 1
@@ -43,9 +38,7 @@ class DataAggregator:
                     self.alphabet_counts[letter] += 1
                     print(f"Counted emoji: {text} as alphabet: {letter}, current counts: {self.alphabet_counts}")
                 else:
-                    print(f"Unknown character: {text}")
-            else:
-                print(f"Unknown character: {text}")
+                    print(f"Unknown character: {text}, ordinal value: {ord(text)}")
 
     async def get_aggregated_data(self):
         """アルファベット出現回数を配列形式で取得"""
@@ -146,7 +139,6 @@ async def handle_post(request):
     try:
         post_data = await request.read()
         print(f"[handle_post] Read request body: {len(post_data)} bytes.")
-        print(f"[handle_post] Raw request body: {post_data}")
         payload = json.loads(post_data.decode('utf-8'))
         print("[handle_post] Parsed JSON payload.")
 
