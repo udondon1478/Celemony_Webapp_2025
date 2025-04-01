@@ -27,7 +27,7 @@ class DataAggregator:
         """受信テキストを処理して、対象のアルファベットの出現回数をカウント"""
         async with self.lock:
             # テキストが単一文字で、かつ対象のアルファベットの場合のみカウント
-            emoji_mapping = {'😄': 'e', '🥰': 'v', '🤩': 'c', '🥳': 'b', '👍': 'm', '❤️': 'p', '❤️‍️': 'p'}
+            emoji_mapping = {'😄': 'e', '🥰': 'v', '🤩': 'c', '🥳': 'b', '👍': 'm', '❤️': 'p'}
             if len(text) == 1:
                 text_lower = text.lower()
                 if text_lower in TARGET_ALPHABETS:
@@ -146,6 +146,7 @@ async def handle_post(request):
         # イベントから必要な情報を抽出
         for event in payload.get('events', []):
             print(f"[handle_post] Processing event: type={event.get('type')}")
+            print(f"Received character: {text}, ordinal value: {ord(text)}")
             if event.get('type') == 'message' and event['message'].get('type') == 'text':
                 text = event['message']['text']
                 # LINE Platformからのタイムスタンプを使用、なければ現在時刻
