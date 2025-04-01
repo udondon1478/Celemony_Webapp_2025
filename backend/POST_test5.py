@@ -10,7 +10,7 @@ from collections import defaultdict
 sse_clients = weakref.WeakSet()
 
 # 計測対象のアルファベットとその順序を定義
-TARGET_ALPHABETS = ['x', 'k', 'h', 't', 'l', 'a', 's', 'd', 'p', 'm', 'b', 'c', 'v', 'e']
+TARGET_ALPHABETS = ['e', 'v', 'c', 'b', 'm', 'p', 'd', 's', 'a', 'l', 't', 'h', 'k', 'x']
 
 class DataAggregator:
     def __init__(self):
