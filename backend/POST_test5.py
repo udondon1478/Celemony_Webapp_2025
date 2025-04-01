@@ -28,17 +28,21 @@ class DataAggregator:
         async with self.lock:
             # テキストが単一文字で、かつ対象のアルファベットの場合のみカウント
             emoji_mapping = {'😄': 'e', '🥰': 'v', '🤩': 'c', '🥳': 'b', '👍': 'm', '❤️': 'p', '❤️‍️': 'p'}
-            if len(text) == 1:
+            # First, check if the text is a known emoji
+            if text in emoji_mapping:
+                letter = emoji_mapping[text]
+                self.alphabet_counts[letter] += 1
+                print(f"Counted emoji: {text} as alphabet: {letter}, current counts: {self.alphabet_counts}")
+            # Else, check if it's a single target alphabet character
+            elif len(text) == 1 and text.lower() in TARGET_ALPHABETS:
                 text_lower = text.lower()
-                if text_lower in TARGET_ALPHABETS:
-                    self.alphabet_counts[text_lower] += 1
-                    print(f"Counted alphabet: {text_lower}, current counts: {self.alphabet_counts}")
-                elif text in emoji_mapping:
-                    letter = emoji_mapping[text]
-                    self.alphabet_counts[letter] += 1
-                    print(f"Counted emoji: {text} as alphabet: {letter}, current counts: {self.alphabet_counts}")
-                else:
-                    print(f"Unknown character: {text}, ordinal value: {ord(text)}")
+                self.alphabet_counts[text_lower] += 1
+                print(f"Counted alphabet: {text_lower}, current counts: {self.alphabet_counts}")
+            # Otherwise, log as unknown
+            else:
+                # Avoid error for multi-character strings in ord()
+                ordinal_info = f"ordinal value: {ord(text[0])}" if len(text) > 0 else "empty string"
+                print(f"Unknown character or non-target input: {text}, {ordinal_info}")
 
     async def get_aggregated_data(self):
         """アルファベット出現回数を配列形式で取得"""
