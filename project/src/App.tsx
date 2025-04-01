@@ -25,10 +25,12 @@ const SPECIAL_COMBINATIONS = {
   '🎨🎭': '特別なエフェクト3'
 };
 const BLOCKED_EMOJI_COMBINATIONS: string[] = ["🥺👉👈"];
+const BLOCKED_SINGLE_EMOJIS: string[] = ['🚫', '🙅‍♀️', '🙅‍♂️']; // ★ 追加: 単一ブロック絵文字リスト
 
 const MAX_DISPLAYED_EMOJIS = 200; // 表示する絵文字の最大数を定義
 const EMOJI_DISPLAY_DURATION = 5000; // 絵文字の表示時間 (ms)
 const THROTTLE_INTERVAL = 500; // ★ キュー処理の間隔 (ミリ秒) - この値を調整
+const MAX_QUEUE_SIZE = 20; // ★ キューの最大サイズ
 
 function App() {
   const [displayedEmojis, setDisplayedEmojis] = useState<EmojiDisplay[]>([]);
@@ -121,7 +123,12 @@ function App() {
 
   // ★ SSEメッセージをキューに追加し、処理をトリガーする関数
   const enqueueEmoji = useCallback((emoji: string) => {
-    emojiQueueRef.current.push(emoji);
+    // ★ キューサイズチェックと古い要素の削除
+    if (emojiQueueRef.current.length >= MAX_QUEUE_SIZE) {
+      emojiQueueRef.current.shift(); // 古い絵文字を削除
+      // console.log(`[Queue] Removed oldest emoji due to size limit.`); // デバッグ用
+    }
+    emojiQueueRef.current.push(emoji); // 新しい絵文字を追加
     // console.log(`[Queue] Added: ${emoji}. Queue size: ${emojiQueueRef.current.length}`); // デバッグ用
 
     // スロットリングタイマーがセットされていなければ、処理を開始するタイマーをセット
@@ -195,7 +202,16 @@ function App() {
             return; // 多すぎる絵文字メッセージは無視
           }
 
-          // ブロックリストチェック
+          // ★ 追加: 単一絵文字ブロックリストチェック
+          const containsBlockedSingleEmoji = graphemes.some(grapheme =>
+            BLOCKED_SINGLE_EMOJIS.includes(grapheme)
+          );
+          if (containsBlockedSingleEmoji) {
+            console.log('[SSE] Blocked single emoji detected in message:', messageData.text);
+            return; // ブロック対象の単一絵文字が含まれていたら無視
+          }
+
+          // 組み合わせブロックリストチェック
           if (BLOCKED_EMOJI_COMBINATIONS.includes(messageData.text.trim())) { // trim() で前後の空白を除去
             console.log('[SSE] Blocked emoji combination detected:', messageData.text);
             return; // ブロック対象なら無視
