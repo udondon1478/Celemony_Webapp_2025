@@ -76,7 +76,7 @@ class AsyncUDPSender:
                     try:
                         import struct
                         # 配列をバイナリデータに変換して送信
-                        message = struct.pack('>' + 'i' * len(counts_array), *counts_array)
+                        message = struct.pack('i' * len(counts_array), *counts_array)
                         self.transport.sendto(message)
                         print(f"Sent UDP data: {len(message)} bytes")
                     except Exception as e:
