@@ -19,6 +19,14 @@ class DataAggregator:
         # asyncio用のロック
         self.lock = asyncio.Lock()
 
+        # 設定可能なテキストと値
+        self.ait_text = "AITStart2025"
+        self.ait_host = "100.78.136.99"
+        self.ait_port = 3003
+        self.ait_value = 1
+        self.configurable_text = "SomeOtherText"
+        self.configurable_value = 2
+
     def reset_alphabet_counts(self):
         # 各アルファベットのカウントを0に初期化
         self.alphabet_counts = {letter: 0 for letter in TARGET_ALPHABETS}
@@ -57,7 +65,7 @@ class DataAggregator:
             self.reset_alphabet_counts()
 
 class AsyncUDPSender:
-    def __init__(self, aggregator, host='100.95.101.10', port=9999):
+    def __init__(self, aggregator, host='100.78.136.99', port=5005):
         self.aggregator = aggregator
         self.host = host
         self.port = port
@@ -91,7 +99,7 @@ class AsyncUDPSender:
                         # 配列をバイナリデータに変換して送信
                         message = struct.pack('i' * len(counts_array), *counts_array)
                         self.transport.sendto(message)
-                        print(f"Sent UDP data: {len(message)} bytes")
+                        print(f"Sent UDP data: {len(message)} bytes to port {self.port}")
                     except Exception as e:
                         print(f"UDP送信エラー: {e}")
                         # 送信に失敗した場合（例：ネットワークの問題）に再接続を試みる
@@ -105,6 +113,19 @@ class AsyncUDPSender:
                         except Exception as recon_e:
                             print(f"Failed to re-establish UDP connection: {recon_e}")
                             await asyncio.sleep(5) # 接続を再試行する前に待機
+
+                # AITStart2025用のUDP送信
+                try:
+                    message = struct.pack('i', self.aggregator.ait_value)
+                    new_transport, new_protocol = await loop.create_datagram_endpoint(
+                        lambda: asyncio.DatagramProtocol(),
+                        remote_addr=(self.aggregator.ait_host, self.aggregator.ait_port)
+                    )
+                    new_transport.sendto(message)
+                    print(f"Sent UDP data: {len(message)} bytes to {self.aggregator.ait_host}:{self.aggregator.ait_port}")
+                    new_transport.close()
+                except Exception as e:
+                    print(f"AIT UDP送信エラー: {e}")
 
                 # 送信後にアグリゲーターをリセット
                 await self.aggregator.reset()
@@ -154,12 +175,46 @@ async def handle_post(request):
                 # LINE Platformからのタイムスタンプを使用、なければ現在時刻
                 timestamp = event.get('timestamp', int(datetime.now().timestamp() * 1000))
                 
-                # データ集計 (単一のアルファベットの場合のみカウント)
-                await request.app['aggregator'].add_data(text, timestamp)
-                
-                # SSEクライアントにメッセージを送信（全てのメッセージを送信）
-                await send_sse_message(text)
-                print(f"Processed text: {text}")
+                aggregator = request.app['aggregator']
+                # AITStart2025テキストのチェック
+                if text == aggregator.ait_text:
+                    try:
+                        import struct
+                        # 整数値をバイナリデータに変換して送信
+                        message = struct.pack('i', aggregator.ait_value)
+                        loop = asyncio.get_running_loop()
+                        new_transport, new_protocol = await loop.create_datagram_endpoint(
+                            lambda: asyncio.DatagramProtocol(),
+                            remote_addr=(aggregator.ait_host, aggregator.ait_port)
+                        )
+                        new_transport.sendto(message)
+                        print(f"Sent UDP data: {len(message)} bytes to {aggregator.ait_host}:{aggregator.ait_port} for AITStart2025")
+                        new_transport.close()
+                    except Exception as e:
+                        print(f"AIT UDP送信エラー: {e}")
+                # 設定可能なテキストのチェック
+                elif text == aggregator.configurable_text:
+                    try:
+                        import struct
+                        # 整数値をバイナリデータに変換して送信
+                        message = struct.pack('i', aggregator.configurable_value)
+                        loop = asyncio.get_running_loop()
+                        new_transport, new_protocol = await loop.create_datagram_endpoint(
+                            lambda: asyncio.DatagramProtocol(),
+                            remote_addr=(aggregator.ait_host, aggregator.ait_port)
+                        )
+                        new_transport.sendto(message)
+                        print(f"Sent UDP data: {len(message)} bytes to {aggregator.ait_host}:{aggregator.ait_port} for configurable text")
+                        new_transport.close()
+                    except Exception as e:
+                        print(f"Configurable text UDP送信エラー: {e}")
+                else:
+                    # データ集計 (単一のアルファベットの場合のみカウント)
+                    await request.app['aggregator'].add_data(text, timestamp)
+
+                    # SSEクライアントにメッセージを送信（全てのメッセージを送信）
+                    await send_sse_message(text)
+                    print(f"Processed text: {text}")
 
     except json.JSONDecodeError:
         print("Invalid JSON payload received")

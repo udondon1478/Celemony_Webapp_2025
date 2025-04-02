@@ -1,0 +1,36 @@
+sequenceDiagram
+    participant EXT as 外部システム (LINE)
+    participant BE as Python バックエンド (/test, /sse)
+    participant FE as React フロントエンド
+    participant AGG as DataAggregator (BE内部)
+    participant UDP as UDP Sender (BE内部)
+    participant UDP_RCV as UDP 受信側 (Unity IPアドレス:9999)
+
+    Note over FE: /sse に接続し、メッセージ待機
+    FE->>+BE: GET /sse (SSE接続確立)
+    BE-->>-FE: SSE接続応答
+
+    loop 1秒ごと
+        BE->>AGG: get_aggregated_data()
+        AGG-->>BE: カウントデータ [e, v, c, ...]
+        BE->>UDP: send_data(カウントデータ)
+        UDP->>UDP_RCV: UDPパケット送信
+        BE->>AGG: reset()
+    end
+
+    EXT->>+BE: POST /test (メッセージ送信)
+    BE->>BE: メッセージテキスト抽出
+    BE->>AGG: add_data(テキスト)
+    Note right of BE: 特定文字/絵文字をカウント
+    BE-->>-EXT: HTTP 200 OK
+
+    BE->>FE: SSEメッセージ (テキスト)
+    FE->>FE: メッセージ内容解析
+    alt 絵文字のみの場合
+        FE->>FE: ブロックリスト/文字数チェック
+        FE->>FE: 絵文字をキューに追加
+        Note over FE: スロットリングしながらキュー処理
+        FE->>FE: 絵文字を画面にアニメーション表示
+    else 通常テキストの場合 (コメントアウト中)
+        FE->>FE: 受信メッセージリストに追加・表示
+    end
