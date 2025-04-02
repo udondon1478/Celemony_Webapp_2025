@@ -26,6 +26,7 @@ class DataAggregator:
         self.ait_value = 1
         self.configurable_text = "SomeOtherText"
         self.configurable_value = 2
+        self.ait_sent = False
 
     def reset_alphabet_counts(self):
         # 各アルファベットのカウントを0に初期化
@@ -164,7 +165,7 @@ async def handle_post(request):
                 
                 aggregator = request.app['aggregator']
                 # AITStart2025テキストのチェック
-                if text == aggregator.ait_text:
+                if text == aggregator.ait_text and not aggregator.ait_sent:
                     try:
                         import struct
                         # 整数値をバイナリデータに変換して送信
@@ -177,6 +178,7 @@ async def handle_post(request):
                         new_transport.sendto(message)
                         print(f"Sent UDP data: {len(message)} bytes to {aggregator.ait_host}:{aggregator.ait_port} for AITStart2025")
                         new_transport.close()
+                        aggregator.ait_sent = True
                     except Exception as e:
                         print(f"AIT UDP送信エラー: {e}")
                 # 設定可能なテキストのチェック
