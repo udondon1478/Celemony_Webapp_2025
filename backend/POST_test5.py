@@ -114,19 +114,6 @@ class AsyncUDPSender:
                             print(f"Failed to re-establish UDP connection: {recon_e}")
                             await asyncio.sleep(5) # 接続を再試行する前に待機
 
-                # AITStart2025用のUDP送信
-                try:
-                    message = struct.pack('i', self.aggregator.ait_value)
-                    new_transport, new_protocol = await loop.create_datagram_endpoint(
-                        lambda: asyncio.DatagramProtocol(),
-                        remote_addr=(self.aggregator.ait_host, self.aggregator.ait_port)
-                    )
-                    new_transport.sendto(message)
-                    print(f"Sent UDP data: {len(message)} bytes to {self.aggregator.ait_host}:{self.aggregator.ait_port}")
-                    new_transport.close()
-                except Exception as e:
-                    print(f"AIT UDP送信エラー: {e}")
-
                 # 送信後にアグリゲーターをリセット
                 await self.aggregator.reset()
 
