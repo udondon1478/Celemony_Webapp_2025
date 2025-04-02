@@ -178,7 +178,7 @@ async def handle_post(request):
                         new_transport.sendto(message)
                         print(f"Sent UDP data: {len(message)} bytes to {aggregator.ait_host}:{aggregator.ait_port} for AITStart2025")
                         new_transport.close()
-                        aggregator.ait_sent = True
+                        aggregator.ait_sent = False # 送信フラグをリセット
                     except Exception as e:
                         print(f"AIT UDP送信エラー: {e}")
                 # 設定可能なテキストのチェック
