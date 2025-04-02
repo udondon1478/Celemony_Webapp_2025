@@ -24,7 +24,7 @@ class DataAggregator:
         self.ait_host = "100.78.136.99"
         self.ait_port = 3003
         self.ait_value = 1
-        self.configurable_text = "SomeOtherText"
+        self.configurable_text = "Scene2"
         self.configurable_value = 2
         self.ait_sent = False
 
